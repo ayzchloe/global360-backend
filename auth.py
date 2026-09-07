@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 import bcrypt  # imported early for the __about__ workaround below
@@ -10,8 +11,11 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models
 
-# CHANGE THIS before deploying anywhere real
-SECRET_KEY = "global360-super-secret-key-change-this-later"
+# Secret key now comes from the environment (.env locally, Render env vars in production)
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
