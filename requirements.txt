@@ -1,0 +1,39 @@
+# =============================================================================
+# Global360 Backend — pinned dependencies
+# =============================================================================
+# NOTE: bcrypt MUST stay pinned to 4.0.1.
+#   passlib 1.7.4 reads "bcrypt.__about__.__version__" to detect the bcrypt
+#   version.  bcrypt >= 4.1 removed/relocated that attribute, causing:
+#     (trapped) error reading bcrypt version
+#     AttributeError: module 'bcrypt' has no attribute '__about__'
+#   bcrypt 4.0.1 still exposes __about__, so the version-detect succeeds.
+#   auth.py also contains a defensive fallback for __about__ and explicitly
+#   truncates passwords to 72 bytes to avoid the ValueError raised by
+#   bcrypt >= 4.1 ("password cannot be longer than 72 bytes").
+#   => keep bcrypt==4.0.1 (and do NOT upgrade) until passlib 1.8+ is released.
+# =============================================================================
+bcrypt==4.0.1
+passlib==1.7.4
+fastapi==0.125.0
+uvicorn==0.52.4
+python-multipart==0.0.32
+SQLAlchemy==2.0.52
+python-jose==3.5.0
+pydantic==1.10.26
+email-validator==2.3.0
+cffi==2.1.1
+click==8.5.0
+cryptography==50.0.1
+dnspython==2.8.0
+ecdsa==0.19.2
+greenlet==3.5.5
+h11==0.16.0
+idna==3.19
+pyasn1==0.6.4
+pycparser==3.0
+rsa==4.9.1
+six==1.17.0
+starlette==0.50.0
+typing_extensions==4.16.0
+anyio==4.15.1
+annotated-doc==0.0.5
