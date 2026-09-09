@@ -28,6 +28,7 @@ from routers import (
     applications,
 )
 
+
 # Ensure static directories exist
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
@@ -59,7 +60,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 # CORS Configuration
 allowed_origins_env = os.getenv(
     "ALLOWED_ORIGINS",
-    "https://global360-zeta.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
+    "https://www.itsglobal360.com,https://itsglobal360.com,https://global360-zeta.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
 )
 origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
 
