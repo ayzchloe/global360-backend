@@ -153,3 +153,139 @@ def generate_certificate_pdf(
     c.save()
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def generate_fee_challan_pdf(
+    challan_no: str,
+    student_name: str,
+    program: str,
+    title: str,
+    amount: float,
+    due_date,
+    issued_date,
+    status: str = "pending",
+    payment_method: str = None,
+    account_number: str = None,
+    instructions: str = None,
+) -> bytes:
+    """
+    Generates a printable Fee Challan / Payment Voucher PDF.
+    Returns the binary content as bytes.
+    """
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    if isinstance(issued_date, date):
+        issued_str = issued_date.strftime("%B %d, %Y")
+    else:
+        issued_str = str(issued_date)
+    if isinstance(due_date, date):
+        due_str = due_date.strftime("%B %d, %Y")
+    else:
+        due_str = str(due_date)
+
+    # Background
+    c.setFillColor(colors.HexColor("#FFFFFF"))
+    c.rect(0, 0, width, height, fill=1, stroke=0)
+
+    # Header band
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(60, height - 60, "GLOBAL360")
+    c.setFont("Helvetica", 11)
+    c.setFillColor(colors.HexColor("#64748B"))
+    c.drawString(60, height - 80, "Institute of Technology — Official Fee Challan")
+
+    # Challan number badge
+    c.setFillColor(colors.HexColor("#D97706"))
+    c.setFont("Helvetica-Bold", 10)
+    c.drawRightString(width - 60, height - 60, f"Challan #: {challan_no}")
+
+    # Divider
+    c.setStrokeColor(colors.HexColor("#CBD5E1"))
+    c.setLineWidth(1)
+    c.line(60, height - 95, width - 60, height - 95)
+
+    # Student info
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 130, "Student:")
+    c.setFillColor(colors.HexColor("#334155"))
+    c.setFont("Helvetica", 12)
+    c.drawString(130, height - 130, student_name)
+
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 155, "Program:")
+    c.setFillColor(colors.HexColor("#334155"))
+    c.drawString(130, height - 155, program or "General Studies")
+
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 180, "Title:")
+    c.setFillColor(colors.HexColor("#334155"))
+    c.drawString(130, height - 180, title or "Semester Tuition Fee")
+
+    # Amount box
+    c.setFillColor(colors.HexColor("#FEF3C7"))
+    c.setStrokeColor(colors.HexColor("#D97706"))
+    c.setLineWidth(2)
+    c.roundRect(width - 200, height - 200, 140, 50, 8, fill=1, stroke=1)
+    c.setFillColor(colors.HexColor("#B45309"))
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(width - 130, height - 182, "Amount")
+    c.setFont("Helvetica-Bold", 20)
+    c.drawCentredString(width - 130, height - 165, f"${amount:,.2f}")
+
+    # Dates
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 240, "Issued Date:")
+    c.setFillColor(colors.HexColor("#334155"))
+    c.setFont("Helvetica", 12)
+    c.drawString(160, height - 240, issued_str)
+
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 270, "Due Date:")
+    c.setFillColor(colors.HexColor("#334155"))
+    if status == "paid":
+        c.setFillColor(colors.HexColor("#15803D"))
+        c.drawString(130, height - 270, f"{due_str}  (PAID)")
+    elif status == "overdue":
+        c.setFillColor(colors.HexColor("#B91C1C"))
+        c.drawString(130, height - 270, f"{due_str}  (OVERDUE)")
+    else:
+        c.drawString(130, height - 270, due_str)
+
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 300, "Payment Method:")
+    c.setFillColor(colors.HexColor("#334155"))
+    c.setFont("Helvetica", 12)
+    c.drawString(170, height - 300, payment_method or "Pending")
+
+    # Payment instructions
+    c.setFillColor(colors.HexColor("#0F172A"))
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(60, height - 335, "Payment Instructions:")
+    c.setFillColor(colors.HexColor("#334155"))
+    c.setFont("Helvetica", 10)
+    if instructions:
+        c.drawString(60, height - 355, instructions)
+    if account_number:
+        c.drawString(60, height - 375, f"Account #: {account_number}")
+
+    # Footer
+    c.setFillColor(colors.HexColor("#94A3B8"))
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(width / 2.0, 50, "This is a system-generated challan. Verify via your Global360 student dashboard.")
+    c.setStrokeColor(colors.HexColor("#E2E8F0"))
+    c.setLineWidth(0.5)
+    c.line(60, 75, width - 60, 75)
+    c.drawCentredString(width / 2.0, 35, f"Page 1 — {challan_no}")
+
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()

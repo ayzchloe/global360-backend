@@ -15,6 +15,14 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
 
 
+class UserAdminCreate(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str  # "student", "instructor", or "admin"
+    phone: Optional[str] = None
+
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
@@ -458,6 +466,7 @@ class PaymentAccountCreate(BaseModel):
     branch_code: Optional[str] = None
     instructions: Optional[str] = None
     is_active: bool = True
+    is_default: bool = False
 
 
 class PaymentAccountOut(BaseModel):
@@ -469,6 +478,7 @@ class PaymentAccountOut(BaseModel):
     branch_code: Optional[str] = None
     instructions: Optional[str] = None
     is_active: bool
+    is_default: bool
 
     class Config:
         orm_mode = True
@@ -501,6 +511,15 @@ class PartnershipOut(BaseModel):
     class Config:
         orm_mode = True
         from_attributes = True
+
+
+class PartnershipUpdate(BaseModel):
+    company_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    partnership_type: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
 
 
 # ==========================================

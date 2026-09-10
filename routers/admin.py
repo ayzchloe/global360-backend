@@ -103,3 +103,62 @@ def change_user_role(
     db.commit()
     db.refresh(user)
     return user
+
+
+from schemas import UserAdminCreate
+
+
+@router.post("/admin/users", response_model=schemas.UserOut, status_code=201)
+def create_user(
+    user_in: UserAdminCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin),
+):
+    """
+    Required for 'Direct staff account creation' on /portal/admin page.
+    Allows an admin to directly create a user with any role
+    (student, instructor, or admin) without going through the
+    standard student registration flow.
+
+    If the new user is a student, a student profile is auto-created
+    to stay consistent with the public /auth/register flow.
+    """
+    if user_in.role not in ("student", "instructor", "admin"):
+        raise HTTPException(status_code=400, detail="Invalid role. Must be student, instructor, or admin.")
+
+    existing = db.query(models.User).filter(models.User.email == user_in.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    new_user = models.User(
+        name=user_in.name,
+        email=user_in.email,
+        hashed_password=auth.hash_password(user_in.password),
+        role=user_in.role,
+        phone=user_in.phone,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    auth.record_audit_log(
+        db=db,
+        action="USER_CREATED",
+        resource="User",
+        details=f"Admin {current_user.email} created {new_user.email} with role {new_user.role}",
+        user=new_user,
+        ip_address=None,
+    )
+
+    # If student, auto-create student profile (consistent with /auth/register)
+    if new_user.role == "student":
+        student_profile = models.Student(
+            user_id=new_user.id,
+            enrollment_no=f"G360-{new_user.id:04d}",
+            program="General Studies",
+            status="active",
+        )
+        db.add(student_profile)
+        db.commit()
+
+    return new_user

@@ -237,6 +237,7 @@ class PaymentAccount(Base):
     branch_code = Column(String, nullable=True)
     instructions = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_default = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
 
 

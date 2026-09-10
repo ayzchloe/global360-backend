@@ -154,3 +154,58 @@ def delete_payment_account(
     db.delete(account)
     db.commit()
     return {"message": "Payment account deleted successfully"}
+
+
+from fastapi.responses import Response
+from pdf_generator import generate_fee_challan_pdf
+
+
+@router.patch("/payment-accounts/{account_id}/default", response_model=schemas.PaymentAccountOut)
+def set_default_payment_account(
+    account_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin),
+):
+    """Marks the given account as default and unsets is_default on all others."""
+    account = db.query(models.PaymentAccount).filter(models.PaymentAccount.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Payment account not found")
+    db.query(models.PaymentAccount).filter(models.PaymentAccount.id != account_id).update({"is_default": False})
+    account.is_default = True
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@router.get("/fee-challans/{challan_id}/pdf")
+def download_fee_challan_pdf(challan_id: int, db: Session = Depends(get_db)):
+    """Dynamically renders a printable Fee Challan / Payment Voucher PDF."""
+    challan = db.query(models.FeeChallan).filter(models.FeeChallan.id == challan_id).first()
+    if not challan:
+        raise HTTPException(status_code=404, detail="Fee Challan not found")
+    student_name = challan.student.user.name if challan.student and challan.student.user else "Global360 Student"
+    default_account = (
+        db.query(models.PaymentAccount)
+        .filter(models.PaymentAccount.is_default == True, models.PaymentAccount.is_active == True)
+        .first()
+    )
+    account_number = default_account.account_number if default_account else None
+    instructions = default_account.instructions if default_account else None
+    pdf_bytes = generate_fee_challan_pdf(
+        challan_no=challan.challan_no,
+        student_name=student_name,
+        program=challan.program or "General Studies",
+        title=challan.title,
+        amount=challan.amount,
+        due_date=challan.due_date,
+        issued_date=challan.issued_date,
+        status=challan.status,
+        payment_method=challan.payment_method,
+        account_number=account_number,
+        instructions=instructions,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="Global360_Fee_Challan_{}.pdf"'.format(challan.challan_no)},
+    )

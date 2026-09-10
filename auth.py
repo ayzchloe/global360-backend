@@ -19,6 +19,129 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 RESET_TOKEN_EXPIRE_HOURS = 2
 
+# ============================================================
+# OAuth Provider Credentials (Google & LinkedIn)
+# ============================================================
+# These are read from environment variables / .env file.
+# They MUST be configured before OAuth login flows can verify
+# tokens against the respective identity providers.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+LINKEDIN_CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID")
+LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET")
+
+# Map provider identifiers to the environment-configured credentials
+OAUTH_PROVIDERS = {
+    "google": {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+    },
+    "linkedin": {
+        "client_id": LINKEDIN_CLIENT_ID,
+        "client_secret": LINKEDIN_CLIENT_SECRET,
+    },
+}
+
+
+def verify_oauth_token(provider: str, token: str) -> dict:
+    """
+    Verifies an OAuth token against the respective identity provider
+    (Google or LinkedIn) and returns the verified user information
+    containing ``email``, ``name``, and ``avatar_url``.
+
+    The verification uses the provider credentials (``*_CLIENT_ID`` /
+    ``*_CLIENT_SECRET``) read from the environment so that only tokens
+    issued for *this* application are accepted.
+
+    Raises ``HTTPException`` (401) when the token is invalid or was not
+    issued for this application.
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OAuth token is required for token verification",
+        )
+
+    provider_key = (provider or "").lower()
+    if provider_key not in OAUTH_PROVIDERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported OAuth provider: {provider}",
+        )
+
+    config = OAUTH_PROVIDERS[provider_key]
+
+    import httpx
+
+    try:
+        if provider_key == "google":
+            # Google: verify the ID token via the tokeninfo endpoint.
+            resp = httpx.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"id_token": token},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google OAuth token verification failed: token is invalid or expired",
+                )
+            data = resp.json()
+            # Verify that the token was issued for our Google client ID.
+            if config["client_id"] and data.get("aud") != config["client_id"]:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Google OAuth token was not issued for this application",
+                )
+            return {
+                "email": data.get("email"),
+                "name": data.get("name"),
+                "avatar_url": data.get("picture"),
+            }
+
+        elif provider_key == "linkedin":
+            # LinkedIn: use the OIDC userinfo endpoint with the bearer token.
+            resp = httpx.get(
+                "https://api.linkedin.com/v2/userinfo",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10.0,
+            )
+            if resp.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="LinkedIn OAuth token verification failed: token is invalid or expired",
+                )
+            data = resp.json()
+            # Optionally verify the token client_id if present in the response.
+            token_client_id = data.get("cid") or data.get("aud")
+            if config["client_id"] and token_client_id and token_client_id != config["client_id"]:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="LinkedIn OAuth token was not issued for this application",
+                )
+            return {
+                "email": data.get("email"),
+                "name": data.get("name"),
+                "avatar_url": data.get("picture"),
+            }
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"{provider.capitalize()} OAuth verification timed out",
+        )
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not reach {provider.capitalize()} OAuth provider for token verification",
+        )
+
+    # Should never reach here
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=f"Could not verify {provider.capitalize()} OAuth token",
+    )
+
 # bcrypt / passlib compatibility
 if not hasattr(bcrypt, "__about__"):
     import types

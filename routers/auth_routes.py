@@ -108,6 +108,19 @@ def update_profile(
 def handle_oauth(req: schemas.OAuthLoginRequest, provider: str, request: Request, db: Session):
     email = req.email
     name = req.name or (email.split("@")[0].capitalize() if email else f"{provider.capitalize()} User")
+    avatar_url = req.avatar_url
+
+    # If an OAuth token is provided, verify it against the identity provider
+    # using the credentials read from environment variables. The verified
+    # values from the provider take precedence over the request payload.
+    if req.token:
+        verified = auth.verify_oauth_token(provider, req.token)
+        if verified.get("email"):
+            email = verified["email"]
+        if verified.get("name"):
+            name = verified["name"]
+        if verified.get("avatar_url"):
+            avatar_url = verified["avatar_url"]
 
     if not email:
         raise HTTPException(status_code=400, detail="Email is required for OAuth login")
@@ -121,7 +134,7 @@ def handle_oauth(req: schemas.OAuthLoginRequest, provider: str, request: Request
             email=email,
             hashed_password=auth.hash_password(random_pwd),
             role="student",
-            avatar_url=req.avatar_url,
+            avatar_url=avatar_url,
         )
         db.add(user)
         db.commit()
@@ -146,8 +159,8 @@ def handle_oauth(req: schemas.OAuthLoginRequest, provider: str, request: Request
             ip_address=auth.get_client_ip(request),
         )
     else:
-        if req.avatar_url and not user.avatar_url:
-            user.avatar_url = req.avatar_url
+        if avatar_url and not user.avatar_url:
+            user.avatar_url = avatar_url
             db.commit()
 
     token = auth.create_access_token(data={"sub": str(user.id)})
