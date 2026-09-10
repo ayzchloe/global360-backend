@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import models
-from database import engine
+from database import engine, SessionLocal
 from routers import (
     auth_routes,
     students,
@@ -35,13 +35,69 @@ UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 
+def seed_default_accounts() -> None:
+    """
+    Idempotent startup seeding of default admin & instructor accounts.
+
+    These credentials are for development/staging only. They use the same
+    bcrypt-hashing path as the rest of the application (auth.hash_password),
+    so the accounts can be used with the standard /auth/login flow.
+
+    Production deployments should override these via environment variables
+    (see .env.example) or remove this call entirely after first bootstrap.
+    """
+    import auth
+
+    defaults = [
+        {
+            "name": os.getenv("DEFAULT_ADMIN_NAME", "Global360 Administrator"),
+            "email": os.getenv("DEFAULT_ADMIN_EMAIL", "admin@global360.edu"),
+            "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "AdminPass123!"),
+            "role": "admin",
+            "phone": "+1 (555) 019-2831",
+        },
+        {
+            "name": os.getenv("DEFAULT_INSTRUCTOR_NAME", "Prof. Marcus Vance"),
+            "email": os.getenv("DEFAULT_INSTRUCTOR_EMAIL", "instructor@global360.edu"),
+            "password": os.getenv("DEFAULT_INSTRUCTOR_PASSWORD", "InstructorPass123!"),
+            "role": "instructor",
+            "phone": "+1 (555) 019-4822",
+        },
+    ]
+
+    db = SessionLocal()
+    try:
+        for creds in defaults:
+            existing = db.query(models.User).filter(models.User.email == creds["email"]).first()
+            if existing:
+                continue
+            user = models.User(
+                name=creds["name"],
+                email=creds["email"],
+                hashed_password=auth.hash_password(creds["password"]),
+                role=creds["role"],
+                phone=creds.get("phone"),
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            print(f"[seed] Created default {creds['role']} account: {creds['email']}")
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application startup and shutdown management.
-    Ensures all database tables and indexes are initialized.
+    Ensures all database tables and indexes are initialized,
+    then seeds default admin/instructor accounts if missing.
     """
     models.Base.metadata.create_all(bind=engine)
+    seed_default_accounts()
     yield
 
 

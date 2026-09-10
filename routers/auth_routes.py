@@ -49,7 +49,7 @@ def register(user_in: schemas.UserCreate, request: Request, db: Session = Depend
         ip_address=auth.get_client_ip(request),
     )
 
-    token = auth.create_access_token(data={"sub": str(new_user.id)})
+    token = auth.create_access_token(data={"sub": str(new_user.id), "role": new_user.role})
     return {"access_token": token, "user": new_user}
 
 
@@ -72,7 +72,7 @@ def login(credentials: schemas.UserLogin, request: Request, db: Session = Depend
         ip_address=auth.get_client_ip(request),
     )
 
-    token = auth.create_access_token(data={"sub": str(user.id)})
+    token = auth.create_access_token(data={"sub": str(user.id), "role": user.role})
     return {"access_token": token, "user": user}
 
 
@@ -163,7 +163,7 @@ def handle_oauth(req: schemas.OAuthLoginRequest, provider: str, request: Request
             user.avatar_url = avatar_url
             db.commit()
 
-    token = auth.create_access_token(data={"sub": str(user.id)})
+    token = auth.create_access_token(data={"sub": str(user.id), "role": user.role})
     return {"access_token": token, "user": user}
 
 

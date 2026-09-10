@@ -44,6 +44,10 @@ class UserOut(BaseModel):
         from_attributes = True
 
 
+# Alias matching the frontend contract: `/auth/user` (GET /me) reads permissions from role.
+UserRead = UserOut
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

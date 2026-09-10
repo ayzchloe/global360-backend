@@ -220,6 +220,25 @@ require_admin = require_roles(["admin"])
 require_instructor_or_admin = require_roles(["instructor", "admin"])
 
 
+def require_role(*allowed_roles: str):
+    """
+    General-purpose role verification dependency.
+
+    Usage (FastAPI):
+        @router.get("/admin-only")
+        def admin_only(current_user: models.User = Depends(require_role("admin"))):
+            ...
+
+        @router.get("/staff")
+        def staff_only(current_user: models.User = Depends(require_role("admin", "instructor"))):
+            ...
+
+    Semantically equivalent to ``require_roles(list(allowed_roles))`` —
+    provided as a friendlier, more explicit alias.
+    """
+    return require_roles(list(allowed_roles))
+
+
 def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:

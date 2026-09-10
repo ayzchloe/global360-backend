@@ -1,6 +1,8 @@
 from datetime import date
+from enum import Enum as PyEnum
 from sqlalchemy import (
     Column,
+    Enum,
     Integer,
     String,
     Date,
@@ -14,6 +16,18 @@ from sqlalchemy.orm import relationship
 from database import Base, utcnow
 
 
+class UserRole(str, PyEnum):
+    """Enumeration of user roles for role-based access control.
+
+    Inherits from ``str`` so enum members compare/hash equal to their
+    plain-string values (e.g. ``UserRole.admin == "admin"``), which keeps
+    backward compatibility with existing code and database rows.
+    """
+    student = "student"
+    instructor = "instructor"
+    admin = "admin"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -21,7 +35,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(String, default="student")  # "student", "instructor", "admin"
+    role = Column(Enum(UserRole, native_enum=False), default=UserRole.student)  # "student", "instructor", "admin"
     avatar_url = Column(String, nullable=True)
     phone = Column(String, nullable=True)
     bio = Column(Text, nullable=True)
