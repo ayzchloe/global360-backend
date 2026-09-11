@@ -89,15 +89,43 @@ def seed_default_accounts() -> None:
         db.close()
 
 
+def seed_payment_accounts() -> None:
+    """
+    Ensures default company bank details are seeded into the finance database.
+    """
+    db = SessionLocal()
+    try:
+        # Check if payment accounts table/model exists
+        if hasattr(models, "PaymentAccount"):
+            existing = db.query(models.PaymentAccount).filter_by(account_number="11530112223716").first()
+            if not existing:
+                account = models.PaymentAccount(
+                    bank_name=os.getenv("DEFAULT_BANK_NAME", "Meezan Bank (Askari IX Lahore Branch)"),
+                    account_title=os.getenv("DEFAULT_ACCOUNT_TITLE", "KIRAN FATIMA"),
+                    account_number=os.getenv("DEFAULT_ACCOUNT_NUMBER", "11530112223716"),
+                    iban=os.getenv("DEFAULT_IBAN", "PK34MEZN0011530112223716"),
+                    is_active=True
+                )
+                db.add(account)
+                db.commit()
+                print("[seed] Default Meezan Bank payment account created.")
+    except Exception as e:
+        db.rollback()
+        print(f"[seed warning] Payment account seeding skipped/failed: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application startup and shutdown management.
     Ensures all database tables and indexes are initialized,
-    then seeds default admin/instructor accounts if missing.
+    then seeds default admin/instructor accounts and payment accounts if missing.
     """
     models.Base.metadata.create_all(bind=engine)
     seed_default_accounts()
+    seed_payment_accounts()
     yield
 
 
