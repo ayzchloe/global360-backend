@@ -10,6 +10,13 @@ SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 if not SQLALCHEMY_DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set!")
 
+# Normalize the legacy "postgres://" scheme that platforms like Render hand out;
+# SQLAlchemy 2.x only recognizes "postgresql://" and will fail to load the dialect.
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
+        "postgres://", "postgresql://", 1
+    )
+
 def utcnow() -> datetime:
     """Return current UTC time as a naive datetime."""
     return datetime.now(timezone.utc).replace(tzinfo=None)

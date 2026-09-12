@@ -13,8 +13,10 @@ from sqlalchemy.orm import Session
 from database import get_db, utcnow
 import models
 
-# Secret key configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "1955616771a8bfc4bb317dd5ad05f3f78435a510a66fe106a465c00eead7be2c")
+# Secret key configuration (fail-fast: never fall back to a hardcoded key)
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 RESET_TOKEN_EXPIRE_HOURS = 2

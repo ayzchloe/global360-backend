@@ -97,12 +97,17 @@ def seed_payment_accounts() -> None:
     try:
         # Check if payment accounts table/model exists
         if hasattr(models, "PaymentAccount"):
-            existing = db.query(models.PaymentAccount).filter_by(account_number="11530112223716").first()
+            default_account_number = os.getenv(
+                "DEFAULT_ACCOUNT_NUMBER", "11530112223716"
+            )
+            existing = db.query(models.PaymentAccount).filter_by(
+                account_number=default_account_number
+            ).first()
             if not existing:
                 account = models.PaymentAccount(
                     bank_name=os.getenv("DEFAULT_BANK_NAME", "Meezan Bank (Askari IX Lahore Branch)"),
                     account_title=os.getenv("DEFAULT_ACCOUNT_TITLE", "KIRAN FATIMA"),
-                    account_number=os.getenv("DEFAULT_ACCOUNT_NUMBER", "11530112223716"),
+                    account_number=default_account_number,
                     iban=os.getenv("DEFAULT_IBAN", "PK34MEZN0011530112223716"),
                     is_active=True
                 )
