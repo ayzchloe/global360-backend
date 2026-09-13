@@ -45,7 +45,8 @@ def get_admin_stats(
     Required for /portal/admin overview metric cards.
     """
     total_students = db.query(models.Student).count()
-    active_enrollments = db.query(models.Enrollment).filter(models.Enrollment.status == "active").count()
+    # Case-insensitive so 'ACTIVE'/'Active'/'active' rows all count
+    active_enrollments = db.query(models.Enrollment).filter(func.lower(models.Enrollment.status) == "active").count()
     total_courses = db.query(models.Course).count()
     pending_applications = db.query(models.Application).filter(models.Application.status == "pending").count()
     pending_assignments = db.query(models.AssignmentSubmission).filter(models.AssignmentSubmission.status == "submitted").count()

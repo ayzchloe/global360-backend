@@ -1,3 +1,4 @@
+import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +9,8 @@ from database import get_db
 import models
 import schemas
 import auth
+
+logger = logging.getLogger("global360.applications")
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -28,10 +31,19 @@ def provision_student_records(db: Session, app_record: models.Application) -> di
     ``flush()`` es to obtain generated primary keys — the caller owns the
     surrounding transaction and decides when to ``commit()``.
 
-    Returns a summary dict indicating which records were newly created:
-    ``{"user": User|None, "student": Student|None, "enrollment": Enrollment|None}``
+    Returns a dict with the final records (even if they already existed) and
+    which ones were newly created:
+    ``{"user": User, "student": Student, "enrollment": Enrollment|None,
+       "user_created": bool, "student_created": bool, "enrollment_created": bool}``
     """
-    result: dict = {"user": None, "student": None, "enrollment": None}
+    result: dict = {
+        "user": None,
+        "student": None,
+        "enrollment": None,
+        "user_created": False,
+        "student_created": False,
+        "enrollment_created": False,
+    }
 
     # 1) User — match email case-insensitively
     user = (
@@ -49,6 +61,7 @@ def provision_student_records(db: Session, app_record: models.Application) -> di
         db.add(user)
         db.flush()  # populate user.id before creating the Student profile
         result["user"] = user
+        result["user_created"] = True
 
     # 2) Student profile — one per user (user_id is unique)
     student = (
@@ -66,6 +79,7 @@ def provision_student_records(db: Session, app_record: models.Application) -> di
         db.add(student)
         db.flush()  # populate student.id before creating the Enrollment
         result["student"] = student
+        result["student_created"] = True
 
     # 3) Enrollment — resolve the course from the application's requested track
     course = None
@@ -93,6 +107,7 @@ def provision_student_records(db: Session, app_record: models.Application) -> di
             db.add(enrollment)
             db.flush()
             result["enrollment"] = enrollment
+            result["enrollment_created"] = True
 
     return result
 
@@ -100,9 +115,9 @@ def provision_student_records(db: Session, app_record: models.Application) -> di
 def provision_summary(provisioned: dict) -> dict:
     """Serialize a provisioning result into a plain (JSON-safe) report."""
     return {
-        "user_created": provisioned["user"] is not None,
-        "student_created": provisioned["student"] is not None,
-        "enrollment_created": provisioned["enrollment"] is not None,
+        "user_created": provisioned["user_created"],
+        "student_created": provisioned["student_created"],
+        "enrollment_created": provisioned["enrollment_created"],
     }
 
 
@@ -131,12 +146,27 @@ def list_applications(
 
 # ADMIN-ONLY — approve an application AND atomically provision the linked
 # User / Student / Enrollment records in a single database transaction.
-@router.post("/{app_id}/approve", response_model=schemas.ApplicationOut)
+@router.post("/{app_id}/approve")
 def approve_application(
     app_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_admin),
 ):
+    """
+    Approves an admissions application and transactionally auto-enrolls the
+    applicant. Within ONE session/transaction (flush, then commit):
+
+      a) Application.status -> APPROVED
+      b) User  (created if no user exists with the application's email)
+      c) Student (created if missing for the user, status='active',
+         enrollment number + program from the application data)
+      d) Enrollment (created if missing for student_id + course_id,
+         status='active' — compared case-insensitively everywhere)
+      e) db.commit() — either all writes persist or nothing does.
+
+    Returns a JSON confirmation of the application, the Student record and
+    the Enrollment record (with *_created flags for each).
+    """
     app_record = db.query(models.Application).filter(models.Application.id == app_id).first()
     if not app_record:
         raise HTTPException(status_code=404, detail="Application not found")
@@ -146,18 +176,62 @@ def approve_application(
 
     try:
         # b/c/d) Provision User -> Student -> Enrollment (idempotent, flushed)
-        provision_student_records(db, app_record)
+        provisioned = provision_student_records(db, app_record)
         # e) Single atomic commit — either everything persists or nothing does
         db.commit()
     except Exception as exc:  # noqa: BLE001 — any failure must roll the whole approval back
         db.rollback()
+        logger.error("Approval failed for application %s, transaction rolled back: %s", app_id, exc)
         raise HTTPException(
             status_code=500,
             detail=f"Approval failed and was rolled back: {exc}",
         )
 
     db.refresh(app_record)
-    return app_record
+    student = provisioned["student"]
+    enrollment = provisioned["enrollment"]
+
+    logger.info(
+        "Application %s approved: student_created=%s, enrollment_created=%s",
+        app_id,
+        provisioned["student_created"],
+        provisioned["enrollment_created"],
+    )
+
+    # Clear confirmation of both writes (student + enrollment)
+    return {
+        "message": "Application approved. Student profile and course enrollment provisioned.",
+        "application": {
+            "id": app_record.id,
+            "full_name": app_record.full_name,
+            "email": app_record.email,
+            "track": app_record.track,
+            "status": app_record.status,
+        },
+        "user_created": provisioned["user_created"],
+        "student_created": provisioned["student_created"],
+        "enrollment_created": provisioned["enrollment_created"],
+        "student": {
+            "id": student.id,
+            "user_id": student.user_id,
+            "enrollment_no": student.enrollment_no,
+            "program": student.program,
+            "status": student.status,
+        } if student else None,
+        "enrollment": {
+            "id": enrollment.id,
+            "student_id": enrollment.student_id,
+            "course_id": enrollment.course_id,
+            "status": enrollment.status,
+        } if enrollment else None,
+        "enrollment_note": (
+            None
+            if enrollment
+            else "No course matched the application track — student profile was "
+            "created, but no enrollment row was inserted. Enroll manually or "
+            "re-check the course 'track' value."
+        ),
+    }
 
 
 # ADMIN-ONLY — update status of admissions application (accept/reject).
