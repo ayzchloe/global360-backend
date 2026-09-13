@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db, utcnow
@@ -58,7 +59,8 @@ def list_all_enrollments(
     """
     query = db.query(models.Enrollment)
     if status_filter:
-        query = query.filter(models.Enrollment.status == status_filter)
+        # Case-insensitive so 'ACTIVE', 'Active' and 'active' all match
+        query = query.filter(func.lower(models.Enrollment.status) == status_filter.strip().lower())
     return query.order_by(models.Enrollment.enrolled_at.desc()).all()
 
 

@@ -114,6 +114,18 @@ class StudentOut(BaseModel):
         from_attributes = True
 
 
+class StudentDropdownItem(BaseModel):
+    """Feed item for the Fee Challan 'Student' dropdown (admin portal)."""
+
+    id: int                     # students.id
+    name: str                   # users.name
+    email: Optional[str] = None
+    enrollment_no: Optional[str] = None
+    program: Optional[str] = None
+    course_id: Optional[int] = None
+    course_title: Optional[str] = None
+
+
 # ==========================================
 # LESSON, MODULE & COURSE SCHEMAS
 # ==========================================

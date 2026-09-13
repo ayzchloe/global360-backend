@@ -1,5 +1,8 @@
+import logging
 from datetime import datetime, date
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -7,12 +10,83 @@ import models
 import schemas
 import auth
 
+logger = logging.getLogger("global360.finance")
+
 router = APIRouter(tags=["finance"])
 
 
 # ==========================================
 # FEE CHALLANS
 # ==========================================
+
+@router.get("/fee-challans/students", response_model=list[schemas.StudentDropdownItem])
+def get_challan_student_dropdown(
+    course_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin),
+):
+    """
+    Feeds the 'Student' dropdown on the Fee Challan (Issue Challan) form.
+
+    - students -> users INNER JOIN  (every student must have a user profile)
+    - students -> enrollments LEFT JOIN, restricted to ACTIVE enrollments
+      matched CASE-INSENSITIVELY ('active' / 'ACTIVE' / 'Active')
+    - enrollments -> courses LEFT JOIN
+    - ``course_id`` is strictly optional: when omitted/null no student is
+      excluded; when provided only students actively enrolled in that
+      course are returned.
+    - Returns at least ``{"id": <student.id>, "name": <user.name>}`` per item.
+    """
+    active_status = func.lower(models.Enrollment.status) == "active"
+
+    query = (
+        db.query(
+            models.Student.id.label("id"),
+            models.User.name.label("name"),
+            models.User.email.label("email"),
+            models.Student.enrollment_no.label("enrollment_no"),
+            models.Student.program.label("program"),
+            models.Enrollment.course_id.label("course_id"),
+            models.Course.title.label("course_title"),
+        )
+        .join(models.User, models.Student.user_id == models.User.id)
+        .outerjoin(
+            models.Enrollment,
+            (models.Enrollment.student_id == models.Student.id) & active_status,
+        )
+        .outerjoin(models.Course, models.Enrollment.course_id == models.Course.id)
+    )
+
+    # Optional course filter — only applied when a course_id is actually sent.
+    if course_id is not None:
+        query = query.filter(models.Enrollment.course_id == course_id)
+
+    rows = query.order_by(models.Student.id, models.Enrollment.id).all()
+
+    # Deduplicate: a student may hold several active enrollments; keep the
+    # first active course found for each student.
+    items: dict[int, dict] = {}
+    for row in rows:
+        if row.id in items:
+            continue
+        items[row.id] = {
+            "id": row.id,
+            "name": row.name,
+            "email": row.email,
+            "enrollment_no": row.enrollment_no,
+            "program": row.program,
+            "course_id": row.course_id,
+            "course_title": row.course_title,
+        }
+
+    result = list(items.values())
+    logger.info(
+        "Fee Challan student dropdown: fetched %d student(s) (course_id=%s, enrollment status matched case-insensitively)",
+        len(result),
+        course_id if course_id is not None else "not provided",
+    )
+    return result
+
 
 @router.post("/fee-challans/", response_model=schemas.FeeChallanOut, status_code=201)
 def issue_challan(
