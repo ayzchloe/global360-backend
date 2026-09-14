@@ -146,19 +146,17 @@ app = FastAPI(
 # Static file serving for uploaded files and assets
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# CORS Configuration
-allowed_origins_env = os.getenv(
-    "ALLOWED_ORIGINS",
-    "https://www.itsglobal360.com,https://itsglobal360.com,https://global360-zeta.vercel.app,http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
-)
-origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
-
+# CORS Configuration — allow all origins, methods, and headers so the
+# frontend can call the API from anywhere without CORS policy errors.
+# Note: Starlette's CORSMiddleware echoes the request's Origin header when
+# allow_credentials=True, so credentialed requests still work correctly.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Router Registrations
