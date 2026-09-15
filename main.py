@@ -2,9 +2,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import models
@@ -158,6 +160,38 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+
+# Global exception handler for unhandled errors.
+#
+# Without this, an unhandled exception is caught by Starlette's
+# ServerErrorMiddleware, which sits OUTSIDE the CORS middleware stack, so the
+# plain-text "Internal Server Error" response never receives CORS headers and
+# the browser reports a CORS failure instead of the real 500.
+# Registering a handler for `Exception` moves handling inside the middleware
+# stack (ExceptionMiddleware), and we also set the CORS headers explicitly so
+# frontend clients always receive a readable JSON 500.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Log the full traceback server-side so the real error is visible in logs.
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+    headers: dict[str, str] = {}
+    origin = request.headers.get("origin")
+    if origin:
+        # Mirror CORSMiddleware behaviour (allow_origins=["*"] +
+        # allow_credentials=True echoes the request's Origin header).
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
+        }
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error"},
+        headers=headers,
+    )
 
 # Router Registrations
 app.include_router(auth_routes.router)

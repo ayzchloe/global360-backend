@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db, utcnow
 import models
@@ -57,7 +57,10 @@ def list_all_enrollments(
     """
     Backs the /portal/admin enrollments overview.
     """
-    query = db.query(models.Enrollment)
+    # joinedload: fetch each enrollment's course in a single query so
+    # response serialization never triggers per-row lazy loads (and one
+    # missing course can't crash the whole listing).
+    query = db.query(models.Enrollment).options(joinedload(models.Enrollment.course))
     if status_filter:
         # Case-insensitive so 'ACTIVE', 'Active' and 'active' all match
         query = query.filter(func.lower(models.Enrollment.status) == status_filter.strip().lower())
@@ -75,6 +78,7 @@ def get_student_enrollments(
     """
     return (
         db.query(models.Enrollment)
+        .options(joinedload(models.Enrollment.course))
         .filter(models.Enrollment.student_id == student_id)
         .all()
     )
@@ -86,7 +90,12 @@ def get_enrollment(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    enrollment = db.query(models.Enrollment).filter(models.Enrollment.id == enrollment_id).first()
+    enrollment = (
+        db.query(models.Enrollment)
+        .options(joinedload(models.Enrollment.course))
+        .filter(models.Enrollment.id == enrollment_id)
+        .first()
+    )
     if not enrollment:
         raise HTTPException(status_code=404, detail="Enrollment not found")
     return enrollment

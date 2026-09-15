@@ -214,15 +214,15 @@ class CourseUpdate(BaseModel):
 class CourseOut(BaseModel):
     id: int
     code: Optional[str] = None
-    title: str
-    track: str
-    level: str
-    duration_weeks: int
+    title: Optional[str] = None
+    track: Optional[str] = None
+    level: Optional[str] = None
+    duration_weeks: Optional[int] = None
     description: Optional[str] = None
     thumbnail_url: Optional[str] = None
     instructor_id: Optional[int] = None
-    order: int
-    is_published: bool = True
+    order: Optional[int] = 0
+    is_published: Optional[bool] = True
 
     class Config:
         orm_mode = True
@@ -247,9 +247,12 @@ class EnrollmentOut(BaseModel):
     id: int
     student_id: int
     course_id: int
-    status: str
-    progress_percentage: float = 0.0
-    enrolled_at: datetime
+    # Tolerant of legacy/NULL rows so one bad row cannot 500 the whole
+    # listing (a Pydantic response-validation failure surfaces as an
+    # unhandled 500 Internal Server Error in FastAPI).
+    status: Optional[str] = None
+    progress_percentage: Optional[float] = 0.0
+    enrolled_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
     class Config:
@@ -258,7 +261,9 @@ class EnrollmentOut(BaseModel):
 
 
 class EnrollmentDetailOut(EnrollmentOut):
-    course: CourseOut
+    # Optional: an enrollment whose course_id no longer matches an existing
+    # course (orphaned row) serializes as course=None instead of crashing.
+    course: Optional[CourseOut] = None
 
 
 class ProgressMark(BaseModel):
