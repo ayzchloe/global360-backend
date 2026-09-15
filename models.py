@@ -342,6 +342,10 @@ class Application(Base):
     phone = Column(String, nullable=True)
     track = Column(String, nullable=False)
     message = Column(String, nullable=True)
+    # bcrypt hash of the password the applicant chose at submission time
+    # (NULL for legacy applications). Reused to create the User account when
+    # an admin approves the application. Plaintext is never stored.
+    hashed_password = Column(String, nullable=True)
     status = Column(String, default="pending")
     submitted_at = Column(DateTime, default=utcnow)
 

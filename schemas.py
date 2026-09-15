@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 # ==========================================
@@ -672,6 +672,11 @@ class ApplicationCreate(BaseModel):
     phone: Optional[str] = None
     track: str
     message: Optional[str] = None
+    # Password the applicant chooses at submission time. Optional so legacy
+    # clients / integrations that don't send it keep working (they fall back
+    # to the shared default on approval). Hashed with bcrypt before storage;
+    # never returned by any endpoint.
+    password: Optional[str] = Field(None, min_length=8)
 
 
 class ApplicationOut(BaseModel):

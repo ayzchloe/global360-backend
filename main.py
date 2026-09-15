@@ -123,6 +123,29 @@ def seed_payment_accounts() -> None:
         db.close()
 
 
+def ensure_application_password_column() -> None:
+    """
+    Lightweight idempotent migration: add the applications.hashed_password
+    column to databases created before it existed.
+
+    ``create_all`` only creates missing TABLES — it never alters existing
+    ones — so without this, submitting an application against a pre-existing
+    dev SQLite or production PostgreSQL database would fail with an
+    unknown-column error.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    if "applications" not in inspector.get_table_names():
+        return  # table doesn't exist yet; create_all will include the column
+
+    columns = {col["name"] for col in inspector.get_columns("applications")}
+    if "hashed_password" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE applications ADD COLUMN hashed_password VARCHAR"))
+        print("[migrate] Added applications.hashed_password column")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -131,6 +154,7 @@ async def lifespan(app: FastAPI):
     then seeds default admin/instructor accounts and payment accounts if missing.
     """
     models.Base.metadata.create_all(bind=engine)
+    ensure_application_password_column()
     seed_default_accounts()
     seed_payment_accounts()
     yield

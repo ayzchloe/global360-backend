@@ -52,10 +52,18 @@ def provision_student_records(db: Session, app_record: models.Application) -> di
         .first()
     )
     if not user:
+        # Prefer the password the applicant chose at submission time (already
+        # bcrypt-hashed in applications.hashed_password — do NOT re-hash it).
+        # Legacy applications submitted without a password fall back to the
+        # shared default.
+        hashed_password = (
+            app_record.hashed_password
+            or auth.hash_password(DEFAULT_STUDENT_PASSWORD)
+        )
         user = models.User(
             name=app_record.full_name,
             email=app_record.email.lower(),
-            hashed_password=auth.hash_password(DEFAULT_STUDENT_PASSWORD),
+            hashed_password=hashed_password,
             role="student",
         )
         db.add(user)
@@ -124,7 +132,16 @@ def provision_summary(provisioned: dict) -> dict:
 # PUBLIC — matches the "Apply Now" button on /admissions and all program pages
 @router.post("/", response_model=schemas.ApplicationOut, status_code=201)
 def submit_application(app_in: schemas.ApplicationCreate, db: Session = Depends(get_db)):
-    new_app = models.Application(**app_in.dict())
+    # Hash the applicant's chosen password (when provided) BEFORE it reaches
+    # the database — the plaintext is never persisted. The stored hash is
+    # reused to create the User account when the application is approved.
+    app_data = app_in.dict()
+    chosen_password = app_data.pop("password", None)
+
+    new_app = models.Application(
+        **app_data,
+        hashed_password=auth.hash_password(chosen_password) if chosen_password else None,
+    )
     db.add(new_app)
     db.commit()
     db.refresh(new_app)
@@ -199,8 +216,12 @@ def approve_application(
     )
 
     # Clear confirmation of both writes (student + enrollment)
+    # Top-level email/user_id let the frontend redirect the admin or notify
+    # the student without digging through nested objects.
     return {
         "message": "Application approved. Student profile and course enrollment provisioned.",
+        "email": app_record.email,
+        "user_id": student.user_id if student else None,
         "application": {
             "id": app_record.id,
             "full_name": app_record.full_name,
