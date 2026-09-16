@@ -32,6 +32,22 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 LINKEDIN_CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID")
 LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET")
 
+# ============================================================
+# LinkedIn OAuth / OpenID Connect configuration
+# ============================================================
+# LinkedIn retired the legacy r_* profile/email scopes — requesting them
+# now returns ``invalid_scope_error``. The only valid scopes are the
+# OIDC-standard:
+#   openid profile email
+#
+# The token-verification side (verify_oauth_token below) already uses
+# https://api.linkedin.com/v2/userinfo, which is exactly the endpoint
+# these OIDC scopes grant access to — so scope and verification are now
+# consistent with each other.
+LINKEDIN_SCOPE = os.getenv("LINKEDIN_SCOPE", "openid profile email")
+LINKEDIN_AUTHORIZATION_URL = "https://www.linkedin.com/oauth/v2/authorization"
+LINKEDIN_REDIRECT_URI = os.getenv("LINKEDIN_REDIRECT_URI")
+
 # Map provider identifiers to the environment-configured credentials
 OAUTH_PROVIDERS = {
     "google": {
@@ -41,8 +57,46 @@ OAUTH_PROVIDERS = {
     "linkedin": {
         "client_id": LINKEDIN_CLIENT_ID,
         "client_secret": LINKEDIN_CLIENT_SECRET,
+        "scope": LINKEDIN_SCOPE,
+        "authorization_url": LINKEDIN_AUTHORIZATION_URL,
+        "redirect_uri": LINKEDIN_REDIRECT_URI,
     },
 }
+
+
+def get_linkedin_authorization_url(
+    state: Optional[str] = None, redirect_uri: Optional[str] = None
+) -> dict:
+    """
+    Build the LinkedIn OAuth 2.0 / OIDC authorization URL using the
+    modern ``openid profile email`` scopes (the retired legacy r_* scopes
+    trigger LinkedIn's invalid_scope_error).
+
+    Returns a dict with the ``authorization_url`` and the ``state`` value
+    (auto-generated with a CSPRNG when not supplied) so callers can send
+    the user to LinkedIn and verify the state on the callback.
+    """
+    from urllib.parse import quote, urlencode
+
+    if state is None:
+        state = secrets.token_urlsafe(24)
+    if not redirect_uri:
+        redirect_uri = LINKEDIN_REDIRECT_URI
+    if not redirect_uri:
+        raise ValueError(
+            "LINKEDIN_REDIRECT_URI environment variable is not set — "
+            "it must match a redirect URL whitelisted in the LinkedIn app settings"
+        )
+
+    params = {
+        "response_type": "code",
+        "client_id": LINKEDIN_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "scope": LINKEDIN_SCOPE,
+    }
+    url = f"{LINKEDIN_AUTHORIZATION_URL}?{urlencode(params, quote_via=quote)}"
+    return {"authorization_url": url, "state": state}
 
 
 def verify_oauth_token(provider: str, token: str) -> dict:

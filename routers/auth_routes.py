@@ -1,5 +1,7 @@
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -185,6 +187,43 @@ def oauth_google(req: schemas.OAuthLoginRequest, request: Request, db: Session =
 @router.post("/linkedin", response_model=schemas.Token)
 def oauth_linkedin(req: schemas.OAuthLoginRequest, request: Request, db: Session = Depends(get_db)):
     return handle_oauth(req, provider="LinkedIn", request=request, db=db)
+
+
+@router.get("/linkedin/authorize")
+@router.get("/linkedin/login")
+@router.get("/linkedin/url")
+@router.get("/oauth/linkedin/authorize")
+@router.get("/oauth/linkedin/url")
+def linkedin_authorize(redirect_uri: Optional[str] = None, redirect: bool = False):
+    """
+    Returns the LinkedIn OAuth authorization URL built with the modern
+    OpenID Connect scopes ("openid profile email").
+
+    LinkedIn rejects the retired legacy r_* profile scopes with
+    ``invalid_scope_error`` — the frontend must use this URL (or the same
+    scopes) to start the sign-in flow.
+
+    Response (JSON, default):
+        { "url": "...", "authorization_url": "...", "state": "..." }
+    ``url`` and ``authorization_url`` carry the same value so either key
+    can be consumed by the frontend.
+
+    With ``?redirect=true`` the endpoint responds with an HTTP 302 straight
+    to the LinkedIn authorization page instead of returning JSON.
+    """
+    try:
+        result = auth.get_linkedin_authorization_url(redirect_uri=redirect_uri)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if redirect:
+        return RedirectResponse(result["authorization_url"], status_code=302)
+
+    return {
+        "url": result["authorization_url"],
+        "authorization_url": result["authorization_url"],
+        "state": result["state"],
+    }
 
 
 # ============================================================
