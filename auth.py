@@ -170,7 +170,25 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(_truncate_password(plain_password), hashed_password)
+    """
+    Verify a plaintext password against a stored bcrypt hash.
+
+    Defensive against bad rows in the database: if the stored value is
+    missing, not a bcrypt hash (e.g. plaintext or another scheme), or
+    corrupted, we return False so /auth/login responds with a clean 401
+    instead of crashing with a 500.
+    """
+    if not plain_password or not hashed_password:
+        return False
+    if not isinstance(hashed_password, str):
+        hashed_password = str(hashed_password)
+    if not hashed_password.startswith("$2"):
+        # Not a bcrypt hash — cannot verify with pwd_context.
+        return False
+    try:
+        return pwd_context.verify(_truncate_password(plain_password), hashed_password)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:

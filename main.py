@@ -172,13 +172,28 @@ app = FastAPI(
 # Static file serving for uploaded files and assets
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-# CORS Configuration — allow all origins, methods, and headers so the
-# frontend can call the API from anywhere without CORS policy errors.
-# Note: Starlette's CORSMiddleware echoes the request's Origin header when
-# allow_credentials=True, so credentialed requests still work correctly.
+# CORS Configuration
+#
+# Allowed origins are read from the ALLOWED_ORIGINS (or CORS_ORIGINS)
+# environment variable as a comma-separated list, e.g.:
+#   ALLOWED_ORIGINS=https://www.itsglobal360.com,https://itsglobal360.com,https://global360-zeta.vercel.app,http://localhost:3000,http://localhost:5173
+#
+# - When the variable is set, ONLY those (production/frontend) origins are
+#   allowed, with full credentials support.
+# - When it is unset, we fall back to allow-all so local development and
+#   ad-hoc clients keep working.
+def _get_cors_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS") or os.getenv("CORS_ORIGINS") or ""
+    origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return origins if origins else ["*"]
+
+
+ALLOW_ALL_ORIGINS = "*" in _get_cors_origins()
+CORS_ALLOWED_ORIGINS = _get_cors_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -202,9 +217,10 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
     headers: dict[str, str] = {}
     origin = request.headers.get("origin")
-    if origin:
-        # Mirror CORSMiddleware behaviour (allow_origins=["*"] +
-        # allow_credentials=True echoes the request's Origin header).
+    if origin and (ALLOW_ALL_ORIGINS or origin in CORS_ALLOWED_ORIGINS):
+        # Mirror CORSMiddleware behaviour so 500 responses still carry CORS
+        # headers for browsers (the origin is echoed, never "*", because
+        # allow_credentials=True makes "*" invalid for credentialed requests).
         headers = {
             "Access-Control-Allow-Origin": origin,
             "Access-Control-Allow-Credentials": "true",

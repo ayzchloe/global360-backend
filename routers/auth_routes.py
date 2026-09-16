@@ -1,5 +1,6 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -54,8 +55,15 @@ def register(user_in: schemas.UserCreate, request: Request, db: Session = Depend
 
 
 @router.post("/login", response_model=schemas.Token)
-def login(credentials: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.email == credentials.email).first()
+def login(credentials: schemas.LoginRequest, request: Request, db: Session = Depends(get_db)):
+    # Accepts a JSON body: { "email": "...", "password": "..." } (schemas.LoginRequest).
+    # Email lookup is case-insensitive so "Admin@Global360.edu" matches a row
+    # stored as "admin@global360.edu" instead of failing with 401.
+    user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == credentials.email.lower())
+        .first()
+    )
     if not user or not auth.verify_password(credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
 

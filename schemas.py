@@ -23,9 +23,19 @@ class UserAdminCreate(BaseModel):
     phone: Optional[str] = None
 
 
-class UserLogin(BaseModel):
+class LoginRequest(BaseModel):
+    """
+    JSON body for POST /auth/login.
+
+    The frontend sends: { "email": "...", "password": "..." }
+    This matches that contract exactly (no OAuth2 form-data).
+    """
     email: EmailStr
     password: str
+
+
+# Backwards-compatible alias (same convention as UserRead = UserOut above).
+UserLogin = LoginRequest
 
 
 class UserOut(BaseModel):

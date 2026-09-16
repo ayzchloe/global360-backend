@@ -115,7 +115,8 @@ def main() -> int:
             raise RuntimeError("simulated unhandled error")
 
         r = client.get(
-            "/__test_boom", headers={"Origin": "https://portal.example.com"}
+            "/__test_boom",
+            headers={"Origin": (os.getenv("ALLOWED_ORIGINS") or "").split(",")[0].strip()},
         )
         acao = r.headers.get("access-control-allow-origin")
         print(f"5) unhandled 500 -> {r.status_code}, ACAO={acao!r}, body={r.text[:80]}")
@@ -125,7 +126,10 @@ def main() -> int:
             failures.append("unhandled 500 missing CORS headers")
 
         # ---- Test 6: CORS still on normal responses ------------------------
-        r = client.get("/", headers={"Origin": "https://portal.example.com"})
+        r = client.get(
+            "/",
+            headers={"Origin": (os.getenv("ALLOWED_ORIGINS") or "").split(",")[0].strip()},
+        )
         acao = r.headers.get("access-control-allow-origin")
         print(f"6) GET / (normal) ACAO={acao!r}")
         if r.status_code != 200 or not acao:
